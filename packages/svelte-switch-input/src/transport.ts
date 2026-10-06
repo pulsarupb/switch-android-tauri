@@ -5,7 +5,11 @@ import {
 } from "@tauri-apps/api/core";
 import type {
   DeviceInfo,
-  StateResponse,
+  EffectiveConfig,
+  PollOptions,
+  Snapshot,
+  StreamName,
+  StreamsConfig,
   SwitchInputEvent,
   SwitchInputTransport,
 } from "./types";
@@ -17,10 +21,10 @@ const PLUGIN = "switch-input";
  */
 export function tauriTransport(): SwitchInputTransport {
   return {
-    async subscribe(callback) {
+    async subscribe(stream, callback) {
       const listener: PluginListener = await addPluginListener(
         PLUGIN,
-        "input",
+        stream,
         (payload) => callback(payload as SwitchInputEvent),
       );
       return () => {
@@ -28,12 +32,24 @@ export function tauriTransport(): SwitchInputTransport {
       };
     },
 
+    configure(streams: StreamsConfig) {
+      return invoke<EffectiveConfig>(`plugin:${PLUGIN}|configure`, {
+        payload: { streams },
+      });
+    },
+
+    poll(options?: PollOptions) {
+      return invoke<Snapshot>(`plugin:${PLUGIN}|poll`, {
+        payload: { streams: options?.streams, drain: options?.drain },
+      });
+    },
+
     getState() {
-      return invoke<StateResponse>(`plugin:${PLUGIN}|get_state`);
+      return invoke<EffectiveConfig>(`plugin:${PLUGIN}|get_state`);
     },
 
     setEnabled(enabled) {
-      return invoke<StateResponse>(`plugin:${PLUGIN}|set_enabled`, {
+      return invoke<EffectiveConfig>(`plugin:${PLUGIN}|set_enabled`, {
         payload: { enabled },
       });
     },

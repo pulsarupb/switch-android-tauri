@@ -4,12 +4,14 @@
 description = """
 Default permissions for the switch-input plugin.
 
-Allows controlling native input capture, reading the current state, listing input
-devices, triggering rumble and subscribing to the input event stream.
+Allows configuring and polling input streams, reading state, listing input devices,
+triggering rumble and subscribing to the per-stream input events.
 """
 permissions = [
   "allow-set-enabled",
   "allow-get-state",
+  "allow-configure",
+  "allow-poll",
   "allow-vibrate",
   "allow-list-devices",
   "allow-register-listener",

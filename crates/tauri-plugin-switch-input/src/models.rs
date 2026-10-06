@@ -1,25 +1,71 @@
 use serde::{Deserialize, Serialize};
 
+/// How a stream is delivered to JavaScript.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum StreamMode {
+    Off,
+    Push,
+    Poll,
+}
+
+/// Partial per-stream options. Every field is optional so `configure` is incremental.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StreamOptions {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<StreamMode>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rate_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deadzone: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub include_raw: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sensor_delay: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub buffer_events: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub buffer_size: Option<usize>,
+}
+
+/// Per-stream configuration.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StreamsConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub buttons: Option<StreamOptions>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub axes: Option<StreamOptions>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub touch: Option<StreamOptions>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub imu: Option<StreamOptions>,
+}
+
+/// Request to apply stream configuration.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfigureRequest {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub streams: Option<StreamsConfig>,
+}
+
+/// Request a snapshot (and optionally drain buffered events).
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PollRequest {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub streams: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drain: Option<bool>,
+}
+
 /// Request to enable or disable input capture.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetEnabledRequest {
     pub enabled: bool,
-}
-
-/// Snapshot of the current capture state.
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct StateResponse {
-    pub enabled: bool,
-    /// Whether native capture is actually available on this platform/device.
-    pub available: bool,
-    /// Whether the platform exposes a vibrator (the Switch Lite does not).
-    pub rumble_available: bool,
-    /// Name of the controller currently being captured, if any.
-    pub device_name: Option<String>,
-    /// Logical names of the buttons currently held down.
-    pub pressed: Vec<String>,
 }
 
 /// Request to trigger a rumble/vibration on the controller (or device) vibrator.

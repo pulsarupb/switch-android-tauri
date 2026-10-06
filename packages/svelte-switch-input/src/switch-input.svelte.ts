@@ -5,14 +5,33 @@ import {
   TouchAction,
   type Axes,
   type DeviceInfo,
+  type EffectiveConfig,
+  type EffectiveStreamConfig,
   type ImuState,
+  type PollOptions,
+  type Snapshot,
+  type StreamName,
+  type StreamsConfig,
   type SwitchInputEvent,
   type SwitchInputTransport,
   type TouchPoint,
 } from "./types";
 
+const STREAM_NAMES: StreamName[] = ["buttons", "axes", "touch", "imu"];
+
 /**
- * Reactive Nintendo Switch input state, powered by Svelte 5 runes.
+ * The library's default configuration enables every stream as `push` for convenience.
+ * Pass a `StreamsConfig` to `start()` to opt out (e.g. `{ imu: { mode: "off" } }`).
+ */
+export const DEFAULT_STREAMS: StreamsConfig = {
+  buttons: { mode: "push" },
+  axes: { mode: "push" },
+  touch: { mode: "push" },
+  imu: { mode: "push" },
+};
+
+/**
+ * Reactive Nintendo Switch input, powered by Svelte 5 runes.
  *
  * ```svelte
  * <script lang="ts">
@@ -20,18 +39,17 @@ import {
  *
  *   const input = new SwitchInput();
  *   $effect(() => {
- *     void input.start();
+ *     void input.start({ axes: { mode: "poll" }, imu: { mode: "off" } });
  *     return () => void input.stop();
  *   });
  * </script>
- *
- * <p>A pressed: {input.buttons.A}</p>
  * ```
  */
 export class SwitchInput {
   #transport: SwitchInputTransport;
-  #unsubscribe: (() => void) | null = null;
-  #eventListeners = new Set<(event: SwitchInputEvent) => void>();
+  #unsubscribes = new Map<StreamName, () => void>();
+  #streamListeners = new Map<StreamName, Set<(event: SwitchInputEvent) => void>>();
+  #anyListeners = new Set<(event: SwitchInputEvent) => void>();
 
   /** Whether native capture is enabled. */
   enabled = $state(false);
@@ -45,8 +63,11 @@ export class SwitchInput {
   error = $state<string | null>(null);
   /** Whether a subscription to the native event stream is active. */
   running = $state(false);
-  /** Number of events received since `start()`. */
+  /** Number of push events received since `start()`. */
   eventCount = $state(0);
+
+  /** The resolved per-stream configuration, as reported by the native layer. */
+  streams = $state<Record<StreamName, EffectiveStreamConfig> | null>(null);
 
   /** Per-button pressed state, keyed by logical button name. */
   buttons = $state<Record<string, boolean>>({});
@@ -72,54 +93,66 @@ export class SwitchInput {
     this.#transport = transport;
   }
 
-  /** Subscribe to the native input stream and refresh the initial state. */
-  async start(): Promise<void> {
+  /**
+   * Configure the native streams, then subscribe to every stream that ends up in `push`
+   * mode. Defaults to enabling all streams (`DEFAULT_STREAMS`).
+   */
+  async start(config: StreamsConfig = DEFAULT_STREAMS): Promise<void> {
     if (this.running) return;
     try {
-      this.#unsubscribe = await this.#transport.subscribe((event) =>
-        this.#applyEvent(event),
-      );
+      const effective = await this.#transport.configure(config);
+      this.#applyEffective(effective);
+      await this.#resubscribe();
       this.running = true;
       this.error = null;
-      await this.refresh();
     } catch (error) {
       this.error = error instanceof Error ? error.message : String(error);
       this.available = false;
     }
   }
 
-  /** Stop the subscription and clear transient state. */
+  /** Apply an incremental configuration update and resubscribe as needed. */
+  async configure(config: StreamsConfig): Promise<EffectiveConfig> {
+    const effective = await this.#transport.configure(config);
+    this.#applyEffective(effective);
+    await this.#resubscribe();
+    return effective;
+  }
+
+  /** Stop all subscriptions and clear transient state. */
   async stop(): Promise<void> {
-    this.#unsubscribe?.();
-    this.#unsubscribe = null;
+    for (const unsubscribe of this.#unsubscribes.values()) unsubscribe();
+    this.#unsubscribes.clear();
     this.running = false;
     this.touches = [];
   }
 
-  /** Re-read the state snapshot from the native layer. */
+  /**
+   * Fetch a snapshot of the configured streams. Use this to poll at your own rate instead
+   * of subscribing to push events. Pass `{ drain: true }` to also receive buffered events.
+   */
+  async poll(options?: PollOptions): Promise<Snapshot> {
+    const snapshot = await this.#transport.poll(options);
+    this.#applySnapshot(snapshot);
+    return snapshot;
+  }
+
+  /** Re-read the state/config snapshot from the native layer. */
   async refresh(): Promise<void> {
     try {
-      const state = await this.#transport.getState();
-      this.enabled = state.enabled;
-      this.available = state.available;
-      this.rumbleAvailable = state.rumbleAvailable;
-      this.deviceName = state.deviceName;
+      this.#applyEffective(await this.#transport.getState());
       this.error = null;
     } catch (error) {
       this.error = error instanceof Error ? error.message : String(error);
     }
   }
 
-  /** Enable or disable native capture. */
+  /** Enable or disable native capture (master switch). */
   async setEnabled(enabled: boolean): Promise<void> {
-    const state = await this.#transport.setEnabled(enabled);
-    this.enabled = state.enabled;
-    this.available = state.available;
-    this.rumbleAvailable = state.rumbleAvailable;
-    this.deviceName = state.deviceName;
+    this.#applyEffective(await this.#transport.setEnabled(enabled));
   }
 
-  /** Trigger a rumble/vibration on the controller. */
+  /** Trigger a rumble/vibration on the controller (no-op on the Switch Lite). */
   async vibrate(durationMs = 200, amplitude?: number): Promise<void> {
     await this.#transport.vibrate(durationMs, amplitude);
   }
@@ -129,10 +162,71 @@ export class SwitchInput {
     return this.#transport.listDevices();
   }
 
-  /** Register a callback invoked for every raw event. Returns an unsubscribe function. */
+  /** Subscribe to a single stream's push events. Returns an unsubscribe function. */
+  on(
+    stream: StreamName,
+    listener: (event: SwitchInputEvent) => void,
+  ): () => void {
+    let set = this.#streamListeners.get(stream);
+    if (!set) {
+      set = new Set();
+      this.#streamListeners.set(stream, set);
+    }
+    set.add(listener);
+    return () => set.delete(listener);
+  }
+
+  /** Subscribe to every push event regardless of stream. */
   onEvent(listener: (event: SwitchInputEvent) => void): () => void {
-    this.#eventListeners.add(listener);
-    return () => this.#eventListeners.delete(listener);
+    this.#anyListeners.add(listener);
+    return () => this.#anyListeners.delete(listener);
+  }
+
+  #applyEffective(config: EffectiveConfig): void {
+    this.enabled = config.enabled;
+    this.available = config.available;
+    this.rumbleAvailable = config.rumbleAvailable;
+    this.deviceName = config.deviceName;
+    this.streams = config.streams;
+  }
+
+  async #resubscribe(): Promise<void> {
+    for (const unsubscribe of this.#unsubscribes.values()) unsubscribe();
+    this.#unsubscribes.clear();
+
+    const streams = this.streams;
+    if (!streams) return;
+
+    for (const name of STREAM_NAMES) {
+      if (streams[name]?.mode !== "push") continue;
+      const unsubscribe = await this.#transport.subscribe(name, (event) =>
+        this.#applyEvent(event),
+      );
+      this.#unsubscribes.set(name, unsubscribe);
+    }
+  }
+
+  #applySnapshot(snapshot: Snapshot): void {
+    if (snapshot.buttons) {
+      const next: Record<string, boolean> = {};
+      for (const name of snapshot.buttons.pressed) next[name] = true;
+      this.buttons = next;
+    }
+    if (snapshot.axes) {
+      const { raw, ...axes } = snapshot.axes;
+      this.axes = { ...axes };
+      this.rawAxes = { ...(raw ?? {}) };
+    }
+    if (snapshot.touch) {
+      this.touches = snapshot.touch.pointers.map((pointer) => ({ ...pointer }));
+    }
+    if (snapshot.imu) {
+      this.imu = {
+        accel: [...snapshot.imu.accel] as ImuState["accel"],
+        gyro: [...snapshot.imu.gyro] as ImuState["gyro"],
+        timestamp: snapshot.timestamp,
+      };
+    }
   }
 
   #applyEvent(event: SwitchInputEvent): void {
@@ -143,10 +237,12 @@ export class SwitchInput {
       case "button":
         this.buttons[event.name] = event.pressed;
         break;
-      case "axes":
-        this.axes = { ...event.axes };
-        this.rawAxes = { ...event.raw };
+      case "axes": {
+        const { raw, ...axes } = event.axes;
+        this.axes = { ...axes };
+        this.rawAxes = { ...(raw ?? {}) };
         break;
+      }
       case "touch":
         this.#applyTouch(event);
         break;
@@ -159,9 +255,19 @@ export class SwitchInput {
         break;
     }
 
-    for (const listener of this.#eventListeners) {
+    const streamListeners = this.#streamListeners.get(this.#streamOf(event));
+    if (streamListeners) {
+      for (const listener of streamListeners) {
+        listener(event);
+      }
+    }
+    for (const listener of this.#anyListeners) {
       listener(event);
     }
+  }
+
+  #streamOf(event: SwitchInputEvent): StreamName {
+    return event.type === "button" ? "buttons" : event.type;
   }
 
   #applyTouch(event: Extract<SwitchInputEvent, { type: "touch" }>): void {

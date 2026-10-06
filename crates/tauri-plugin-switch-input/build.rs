@@ -1,6 +1,8 @@
 const COMMANDS: &[&str] = &[
     "set_enabled",
     "get_state",
+    "configure",
+    "poll",
     "vibrate",
     "list_devices",
     "register_listener",

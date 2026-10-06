@@ -20,18 +20,27 @@ pub fn init<R: Runtime, C: DeserializeOwned>(
 pub struct SwitchInput<R: Runtime>(PluginHandle<R>);
 
 impl<R: Runtime> SwitchInput<R> {
-    pub fn set_enabled(&self, enabled: bool) -> crate::Result<StateResponse> {
+    pub fn configure(&self, payload: ConfigureRequest) -> crate::Result<serde_json::Value> {
         self.0
-            .run_mobile_plugin(
-                "setEnabled",
-                SetEnabledRequest { enabled },
-            )
+            .run_mobile_plugin("configure", payload)
             .map_err(Into::into)
     }
 
-    pub fn state(&self) -> crate::Result<StateResponse> {
+    pub fn poll(&self, payload: PollRequest) -> crate::Result<serde_json::Value> {
+        self.0
+            .run_mobile_plugin("poll", payload)
+            .map_err(Into::into)
+    }
+
+    pub fn state(&self) -> crate::Result<serde_json::Value> {
         self.0
             .run_mobile_plugin("getState", ())
+            .map_err(Into::into)
+    }
+
+    pub fn set_enabled(&self, enabled: bool) -> crate::Result<serde_json::Value> {
+        self.0
+            .run_mobile_plugin("setEnabled", SetEnabledRequest { enabled })
             .map_err(Into::into)
     }
 

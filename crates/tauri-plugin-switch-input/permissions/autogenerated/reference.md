@@ -2,13 +2,15 @@
 
 Default permissions for the switch-input plugin.
 
-Allows controlling native input capture, reading the current state, listing input
-devices, triggering rumble and subscribing to the input event stream.
+Allows configuring and polling input streams, reading state, listing input devices,
+triggering rumble and subscribing to the per-stream input events.
 
 #### This default permission set includes the following:
 
 - `allow-set-enabled`
 - `allow-get-state`
+- `allow-configure`
+- `allow-poll`
 - `allow-vibrate`
 - `allow-list-devices`
 - `allow-register-listener`
@@ -22,6 +24,32 @@ devices, triggering rumble and subscribing to the input event stream.
 <th>Description</th>
 </tr>
 
+
+<tr>
+<td>
+
+`switch-input:allow-configure`
+
+</td>
+<td>
+
+Enables the configure command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`switch-input:deny-configure`
+
+</td>
+<td>
+
+Denies the configure command without any pre-configured scope.
+
+</td>
+</tr>
 
 <tr>
 <td>
@@ -71,6 +99,32 @@ Enables the list_devices command without any pre-configured scope.
 <td>
 
 Denies the list_devices command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`switch-input:allow-poll`
+
+</td>
+<td>
+
+Enables the poll command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`switch-input:deny-poll`
+
+</td>
+<td>
+
+Denies the poll command without any pre-configured scope.
 
 </td>
 </tr>

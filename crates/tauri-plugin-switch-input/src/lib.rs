@@ -39,6 +39,8 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
         .invoke_handler(tauri::generate_handler![
             commands::set_enabled,
             commands::get_state,
+            commands::configure,
+            commands::poll,
             commands::vibrate,
             commands::list_devices,
         ])
