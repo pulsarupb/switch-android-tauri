@@ -1,0 +1,35 @@
+{
+  "name": "@pulsarupb/svelte-switch-input",
+  "version": "0.1.0",
+  "description": "Reusable Svelte 5 bindings for Nintendo Switch Lite hardware input on Android via tauri-plugin-switch-input.",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pulsarupb/switch-android-tauri",
+    "directory": "packages/svelte-switch-input"
+  },
+  "svelte": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "svelte": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "files": ["src"],
+  "scripts": {
+    "typecheck": "svelte-check --tsconfig ./tsconfig.json"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.12.1"
+  },
+  "peerDependencies": {
+    "svelte": "^5.0.0"
+  },
+  "devDependencies": {
+    "svelte": "^5.56.3",
+    "svelte-check": "^4.6.0",
+    "typescript": "~6.0.3"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "name": "switch-android-tauri",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "bun --filter @pulsarupb/switch-input-demo dev",
+    "build": "bun --filter @pulsarupb/switch-input-demo build",
+    "build:lib": "bun --filter @pulsarupb/svelte-switch-input build",
+    "typecheck": "bun --filter '*' typecheck",
+    "android:init": "bun --filter @pulsarupb/switch-input-demo android:init",
+    "android:dev": "bun --filter @pulsarupb/switch-input-demo android:dev",
+    "android:build": "bun --filter @pulsarupb/switch-input-demo android:build",
+    "android:install": "bun --filter @pulsarupb/switch-input-demo android:install",
+    "fmt": "cargo fmt --all",
+    "clippy": "cargo clippy --workspace --all-targets -- -D warnings"
+  },
+  "packageManager": "bun@1.3.1"
+}

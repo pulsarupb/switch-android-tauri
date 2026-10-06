@@ -1,0 +1,17 @@
+"$schema" = "schemas/schema.json"
+
+[default]
+description = """
+Default permissions for the switch-input plugin.
+
+Allows controlling native input capture, reading the current state, listing input
+devices, triggering rumble and subscribing to the input event stream.
+"""
+permissions = [
+  "allow-set-enabled",
+  "allow-get-state",
+  "allow-vibrate",
+  "allow-list-devices",
+  "allow-register-listener",
+  "allow-remove-listener",
+]

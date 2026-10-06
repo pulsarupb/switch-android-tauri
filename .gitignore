@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+.pnp/
+
+# Build outputs
+dist/
+build/
+target/
+*.rs.bk
+
+# Tauri / Android generated build artifacts (keep gen/ sources, ignore outputs)
+apps/demo/src-tauri/gen/android/.gradle/
+apps/demo/src-tauri/gen/android/build/
+apps/demo/src-tauri/gen/android/app/build/
+apps/demo/src-tauri/gen/android/local.properties
+apps/demo/src-tauri/gen/android/.idea/
+apps/demo/src-tauri/gen/android/**/.cxx/
+apps/demo/src-tauri/gen/schemas/
+
+# Signing
+*.keystore
+*.jks
+keystore.properties
+
+# Env / editor
+.env
+.env.*
+!.env.example
+.vscode/
+.idea/
+.DS_Store
+*.log
+
+# Android
+crates/tauri-plugin-switch-input/android/.gradle/
+crates/tauri-plugin-switch-input/android/build/
