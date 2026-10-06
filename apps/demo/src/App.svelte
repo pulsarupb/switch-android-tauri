@@ -132,15 +132,6 @@
           <meter min="0" max="10" value={imuGyroMag}></meter>
         </div>
       </div>
-      <div class="rumble">
-        {#if input.rumbleAvailable}
-          <button class="ghost" onclick={() => input.vibrate(80)}>Rumble 80ms</button>
-          <button class="ghost" onclick={() => input.vibrate(300)}>Rumble 300ms</button>
-          <button class="ghost" onclick={() => input.vibrate(1000)}>Rumble 1s</button>
-        {:else}
-          <span class="hint">No rumble hardware on this device</span>
-        {/if}
-      </div>
     </div>
   </section>
 
@@ -421,19 +412,6 @@
   .axis meter {
     grid-column: 1 / -1;
     height: 0.45rem;
-  }
-
-  .rumble {
-    display: flex;
-    gap: 0.4rem;
-    margin-top: auto;
-    padding-top: 0.5rem;
-    flex-wrap: wrap;
-  }
-
-  .rumble .ghost {
-    padding: 0.3rem 0.55rem;
-    font-size: 0.78rem;
   }
 
   .devices ul {
