@@ -126,15 +126,40 @@ shows the launcher, re-wake and re-`am start`. Run `svc power stayon true`.
   `dispatchGenericMotionEvent` and `dispatchTouchEvent`, forwarding to
   `SwitchInputBridge`. This is the only app-side glue (~15 lines); all logic lives in
   the plugin.
-- `SwitchInputPlugin` (`@TauriPlugin`) normalizes events to JSON and pushes them to JS
-  as the `input` event via `trigger(...)` (channel-based; JS uses `addPluginListener`).
+- `SwitchInputPlugin` (`@TauriPlugin`) splits capture into independent streams
+  (`ButtonStream`, `AxisStream`, `TouchStream`, `ImuStream`) and pushes each stream to JS
+  under its own event name (`button`/`axes`/`touch`/`imu`) via `trigger(...)`
+  (channel-based; JS uses `addPluginListener`).
 - `KeyMap` maps raw Linux evdev scan codes (primary) with Android key codes as fallback.
 - IMU uses `SensorManager`; rumble uses `InputDevice.vibrator` (API 31+) falling back to
   the default `VibratorManager`.
-- Commands: `set_enabled`, `get_state`, `vibrate`, `list_devices`.
+- Commands: `configure`, `poll`, `set_enabled`, `get_state`, `vibrate`, `list_devices`.
 - `packages/svelte-switch-input` exposes a Svelte 5 runes class `SwitchInput` plus a
   `SwitchInputTransport` interface (`tauriTransport()` default) so it is testable and
   portable.
+
+### Modular streams (`configure` / `poll`)
+
+Every stream is independently `off`, `push` (event per change) or `poll` (cached snapshot):
+
+| Stream | Event | Default | Notes |
+| --- | --- | --- | --- |
+| buttons | `button` | push | discrete edges; buffered for `poll({ drain: true })` |
+| axes | `axes` | push | `rateMs` 16, `deadzone` 0.01, optional `includeRaw` |
+| touch | `touch` | push | always observed, never consumed |
+| imu | `imu` | **off** | `sensorDelay` ui/game/fastest, `rateMs` 50 |
+
+```ts
+await input.configure({ axes: { mode: "poll", deadzone: 0.02 }, imu: { mode: "off" } });
+const snap = await input.poll({ streams: ["axes"], drain: true }); // snapshot + buffered events
+const off = input.on("button", (e) => { /* per-stream push event */ });
+```
+
+- `off` does no work (sensors unregistered, no payload built).
+- `poll` does **zero bridge traffic** until `poll()` is called — ideal for axes/IMU in a
+  game loop. Only streams in `push` mode **with an active listener** are emitted.
+- The Svelte lib's `start()` defaults to enabling all four streams; pass a `StreamsConfig`
+  to `start(config)` to opt out.
 
 ### Switch button mapping (evdev → logical)
 
