@@ -14,6 +14,7 @@
 
   onMount(() => {
     void input.start();
+    void loadDevices();
     return () => {
       void input.stop();
     };
@@ -60,6 +61,10 @@
       <span class="pill" class:ok={input.running}>
         {input.running ? "listening" : "stopped"}
       </span>
+      <span class="pill">events {input.eventCount}</span>
+      {#if input.lastEvent}
+        <span class="pill accent">{input.lastEvent.type}</span>
+      {/if}
       <button
         class="ghost"
         onclick={() => input.setEnabled(!input.enabled)}
@@ -128,9 +133,13 @@
         </div>
       </div>
       <div class="rumble">
-        <button class="ghost" onclick={() => input.vibrate(80)}>Rumble 80ms</button>
-        <button class="ghost" onclick={() => input.vibrate(300)}>Rumble 300ms</button>
-        <button class="ghost" onclick={() => input.vibrate(1000)}>Rumble 1s</button>
+        {#if input.rumbleAvailable}
+          <button class="ghost" onclick={() => input.vibrate(80)}>Rumble 80ms</button>
+          <button class="ghost" onclick={() => input.vibrate(300)}>Rumble 300ms</button>
+          <button class="ghost" onclick={() => input.vibrate(1000)}>Rumble 1s</button>
+        {:else}
+          <span class="hint">No rumble hardware on this device</span>
+        {/if}
       </div>
     </div>
   </section>
@@ -171,9 +180,10 @@
     height: 100%;
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
-    padding: 0.9rem 1.1rem 1.1rem;
-    overflow: auto;
+    gap: 0.6rem;
+    padding: calc(0.6rem + env(safe-area-inset-top)) 1rem
+      calc(0.7rem + env(safe-area-inset-bottom));
+    overflow: hidden;
   }
 
   header {
@@ -234,6 +244,12 @@
     border-color: #5c2626;
   }
 
+  .pill.accent {
+    background: #2a2140;
+    color: #b69cf5;
+    border-color: #4a3a75;
+  }
+
   .ghost {
     background: #1b2431;
     color: #d7e1ec;
@@ -258,14 +274,26 @@
   .grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.75rem;
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0.6rem;
+    flex: 1;
+    min-height: 0;
   }
 
   .card {
     background: #111823;
     border: 1px solid #1e2836;
     border-radius: 0.8rem;
-    padding: 0.85rem 0.95rem;
+    padding: 0.65rem 0.8rem;
+    min-height: 0;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    scrollbar-width: none;
+  }
+
+  .card::-webkit-scrollbar {
+    display: none;
   }
 
   .buttons {
@@ -301,15 +329,15 @@
 
   .sticks {
     display: flex;
-    gap: 1.2rem;
+    gap: 1rem;
     justify-content: center;
-    padding: 0.4rem 0;
+    padding: 0.1rem 0;
   }
 
   .stick {
     position: relative;
-    width: 120px;
-    height: 120px;
+    width: 100px;
+    height: 100px;
     border-radius: 50%;
     background: radial-gradient(circle at 50% 50%, #16202c, #0d141d);
     border: 1px solid #263140;
@@ -348,7 +376,8 @@
   .touchpad {
     position: relative;
     width: 100%;
-    aspect-ratio: 16 / 9;
+    flex: 1;
+    min-height: 120px;
     background: #0d141d;
     border: 1px solid #263140;
     border-radius: 0.5rem;
@@ -372,32 +401,39 @@
   .imu {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: 0.35rem;
   }
 
   .axis {
     display: grid;
-    grid-template-columns: 3.5rem 1fr;
-    gap: 0.5rem;
+    grid-template-columns: 3rem 1fr;
+    gap: 0.3rem 0.5rem;
     align-items: center;
-    font-size: 0.8rem;
+    font-size: 0.75rem;
     color: #9fb0c4;
   }
 
   .axis code {
     color: #d7e1ec;
-    font-size: 0.78rem;
+    font-size: 0.75rem;
   }
 
   .axis meter {
     grid-column: 1 / -1;
+    height: 0.45rem;
   }
 
   .rumble {
     display: flex;
-    gap: 0.5rem;
-    margin-top: 0.75rem;
+    gap: 0.4rem;
+    margin-top: auto;
+    padding-top: 0.5rem;
     flex-wrap: wrap;
+  }
+
+  .rumble .ghost {
+    padding: 0.3rem 0.55rem;
+    font-size: 0.78rem;
   }
 
   .devices ul {
@@ -406,7 +442,14 @@
     padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 0.35rem;
+    gap: 0.3rem;
+    max-height: 96px;
+    overflow: auto;
+    scrollbar-width: none;
+  }
+
+  .devices ul::-webkit-scrollbar {
+    display: none;
   }
 
   .devices li {

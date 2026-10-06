@@ -18,6 +18,7 @@ impl<R: Runtime> SwitchInput<R> {
         Ok(StateResponse {
             enabled,
             available: false,
+            rumble_available: false,
             device_name: None,
             pressed: Vec::new(),
         })
@@ -27,6 +28,7 @@ impl<R: Runtime> SwitchInput<R> {
         Ok(StateResponse {
             enabled: false,
             available: false,
+            rumble_available: false,
             device_name: None,
             pressed: Vec::new(),
         })

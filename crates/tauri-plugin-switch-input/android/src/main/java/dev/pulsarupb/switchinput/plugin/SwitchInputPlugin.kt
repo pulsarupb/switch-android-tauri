@@ -10,10 +10,12 @@ import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.util.Log
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.webkit.WebView
+import androidx.appcompat.app.AppCompatActivity
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
 import app.tauri.annotation.TauriPlugin
@@ -42,6 +44,8 @@ class VibrateArgs {
  */
 @TauriPlugin
 class SwitchInputPlugin(private val activity: Activity) : Plugin(activity) {
+    private val tag = "SwitchInput"
+
     private val pressedButtons: MutableSet<String> =
         Collections.synchronizedSet(LinkedHashSet<String>())
 
@@ -53,6 +57,9 @@ class SwitchInputPlugin(private val activity: Activity) : Plugin(activity) {
     private var gyroscope: Sensor? = null
     private var sensorsStarted = false
     private var lastImuEmit = 0L
+    private var lastAxesLog = 0L
+    private var lastAxesEmit = 0L
+    private val lastAxes = FloatArray(8)
     private var lastAccel = floatArrayOf(0f, 0f, 0f)
     private var lastGyro = floatArrayOf(0f, 0f, 0f)
 
@@ -64,7 +71,8 @@ class SwitchInputPlugin(private val activity: Activity) : Plugin(activity) {
                 else -> return
             }
             val now = System.currentTimeMillis()
-            if (now - lastImuEmit < 15) return
+            // Throttle: the WebView bridge cannot keep up with raw sensor rates.
+            if (now - lastImuEmit < 50) return
             lastImuEmit = now
             emit("imu") { o ->
                 o.put("accel", JSONArray(lastAccel.map { it.toDouble() }))
@@ -79,17 +87,18 @@ class SwitchInputPlugin(private val activity: Activity) : Plugin(activity) {
     override fun load(webView: WebView) {
         SwitchInputBridge.attach(this)
         startSensors()
+        Log.i(tag, "attached; controller=${controllerName()}")
     }
 
-    override fun onResume(activity: android.app.Activity) {
+    override fun onResume(activity: AppCompatActivity) {
         startSensors()
     }
 
-    override fun onPause(activity: android.app.Activity) {
+    override fun onPause(activity: AppCompatActivity) {
         stopSensors()
     }
 
-    override fun onDestroy(activity: android.app.Activity) {
+    override fun onDestroy(activity: AppCompatActivity) {
         stopSensors()
         SwitchInputBridge.detach(this)
     }
@@ -122,9 +131,11 @@ class SwitchInputPlugin(private val activity: Activity) : Plugin(activity) {
         val amplitude = (args.amplitude ?: 255).coerceIn(1, 255)
         val vibrator = findVibrator()
         if (vibrator == null) {
+            Log.w(tag, "vibrate: no vibrator available")
             invoke.reject("No vibrator available")
             return
         }
+        Log.i(tag, "vibrate duration=$duration amplitude=$amplitude")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             vibrator.vibrate(VibrationEffect.createOneShot(duration, amplitude))
         } else {
@@ -137,6 +148,7 @@ class SwitchInputPlugin(private val activity: Activity) : Plugin(activity) {
     @Command
     fun listDevices(invoke: Invoke) {
         val devices = JSONArray()
+        val summary = StringBuilder()
         for (id in InputDevice.getDeviceIds()) {
             val device = InputDevice.getDevice(id) ?: continue
             val o = JSObject()
@@ -146,13 +158,13 @@ class SwitchInputPlugin(private val activity: Activity) : Plugin(activity) {
             o.put("vendorId", device.vendorId)
             o.put("productId", device.productId)
             o.put("sources", device.sources)
-            o.put(
-                "isGamepad",
-                (device.sources and InputDevice.SOURCE_GAMEPAD) != 0
-            )
+            o.put("isGamepad", KeyMap.isGamepadSource(device.sources))
             o.put("hasVibrator", hasVibrator(device))
             devices.put(o)
+            summary.append("[").append(device.id).append(": ").append(device.name)
+                .append(" src=").append(device.sources).append("] ")
         }
+        Log.i(tag, "devices: $summary")
         val ret = JSObject()
         ret.put("devices", devices)
         invoke.resolve(ret)
@@ -175,6 +187,12 @@ class SwitchInputPlugin(private val activity: Activity) : Plugin(activity) {
         } else {
             pressedButtons.remove(name)
         }
+        Log.i(
+            tag,
+            "button $name ${if (isDown) "down" else "up"} " +
+                "scan=${event.scanCode} key=${event.keyCode} src=${event.source} " +
+                "device=${event.device?.name}"
+        )
 
         emit("button") { o ->
             o.put("name", name)
@@ -212,6 +230,34 @@ class SwitchInputPlugin(private val activity: Activity) : Plugin(activity) {
             event.getAxisValue(MotionEvent.AXIS_RTRIGGER),
             event.getAxisValue(MotionEvent.AXIS_GAS)
         )
+
+        val hatX = event.getAxisValue(MotionEvent.AXIS_HAT_X)
+        val hatY = event.getAxisValue(MotionEvent.AXIS_HAT_Y)
+        val values = floatArrayOf(leftX, leftY, rightX, rightY, l2, r2, hatX, hatY)
+
+        // Only forward when an axis actually moved (and at most every 100ms otherwise).
+        val now = System.currentTimeMillis()
+        var changed = false
+        for (i in values.indices) {
+            if (kotlin.math.abs(values[i] - lastAxes[i]) > 0.005f) {
+                changed = true
+                break
+            }
+        }
+        if (!changed && now - lastAxesEmit < 100) return false
+        lastAxesEmit = now
+        values.copyInto(lastAxes)
+
+        if (now - lastAxesLog >= 250) {
+            lastAxesLog = now
+            Log.i(
+                tag,
+                "axes L=(${"%.2f".format(leftX)},${"%.2f".format(leftY)}) " +
+                    "R=(${"%.2f".format(rightX)},${"%.2f".format(rightY)}) " +
+                    "L2=${"%.2f".format(l2)} R2=${"%.2f".format(r2)} " +
+                    "hat=($hatX,$hatY) device=${event.device?.name}"
+            )
+        }
 
         emit("axes") { o ->
             val axes = JSObject()
@@ -251,6 +297,7 @@ class SwitchInputPlugin(private val activity: Activity) : Plugin(activity) {
 
     fun captureTouchEvent(event: MotionEvent): Boolean {
         if (!enabled) return false
+        Log.v(tag, "touch action=${event.actionMasked} pointers=${event.pointerCount}")
         emit("touch") { o ->
             val pointers = JSONArray()
             for (i in 0 until event.pointerCount) {
@@ -284,6 +331,7 @@ class SwitchInputPlugin(private val activity: Activity) : Plugin(activity) {
         val o = JSObject()
         o.put("enabled", enabled)
         o.put("available", true)
+        o.put("rumbleAvailable", rumbleAvailable())
         o.put("deviceName", controllerName())
         o.put("pressed", JSONArray(pressedButtons.toList()))
         return o
@@ -302,7 +350,7 @@ class SwitchInputPlugin(private val activity: Activity) : Plugin(activity) {
     private fun controllerName(): String? {
         for (id in InputDevice.getDeviceIds()) {
             val device = InputDevice.getDevice(id) ?: continue
-            if ((device.sources and InputDevice.SOURCE_GAMEPAD) != 0) {
+            if (KeyMap.isGamepadSource(device.sources)) {
                 return device.name
             }
         }
@@ -317,10 +365,10 @@ class SwitchInputPlugin(private val activity: Activity) : Plugin(activity) {
         accelerometer = manager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
         gyroscope = manager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
         accelerometer?.let {
-            manager.registerListener(imuListener, it, SensorManager.SENSOR_DELAY_GAME)
+            manager.registerListener(imuListener, it, SensorManager.SENSOR_DELAY_UI)
         }
         gyroscope?.let {
-            manager.registerListener(imuListener, it, SensorManager.SENSOR_DELAY_GAME)
+            manager.registerListener(imuListener, it, SensorManager.SENSOR_DELAY_UI)
         }
         sensorsStarted = true
     }
@@ -335,9 +383,10 @@ class SwitchInputPlugin(private val activity: Activity) : Plugin(activity) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             for (id in InputDevice.getDeviceIds()) {
                 val device = InputDevice.getDevice(id) ?: continue
-                if ((device.sources and InputDevice.SOURCE_GAMEPAD) == 0) continue
+                if (!KeyMap.isGamepadSource(device.sources)) continue
                 val vibrator = device.vibrator
                 if (vibrator != null && vibrator.hasVibrator()) {
+                    Log.i(tag, "vibrator: input device '${device.name}'")
                     return vibrator
                 }
             }
@@ -345,14 +394,18 @@ class SwitchInputPlugin(private val activity: Activity) : Plugin(activity) {
                 as? VibratorManager
             val default = manager?.defaultVibrator
             if (default != null && default.hasVibrator()) {
+                Log.i(tag, "vibrator: default (hasVibrator=${default.hasVibrator()})")
                 return default
             }
+            Log.w(tag, "vibrator: none available on this device")
         } else {
             @Suppress("DEPRECATION")
             val vibrator = activity.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
             if (vibrator != null && vibrator.hasVibrator()) {
+                Log.i(tag, "vibrator: legacy default")
                 return vibrator
             }
+            Log.w(tag, "vibrator: none available on this device")
         }
         return null
     }
@@ -360,6 +413,26 @@ class SwitchInputPlugin(private val activity: Activity) : Plugin(activity) {
     private fun hasVibrator(device: InputDevice): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false
         return device.vibrator?.hasVibrator() == true
+    }
+
+    /** Whether the platform exposes any vibrator at all (Switch Lite does not). */
+    fun rumbleAvailable(): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            for (id in InputDevice.getDeviceIds()) {
+                val device = InputDevice.getDevice(id) ?: continue
+                if (KeyMap.isGamepadSource(device.sources) &&
+                    device.vibrator?.hasVibrator() == true
+                ) {
+                    return true
+                }
+            }
+            val manager = activity.getSystemService(Context.VIBRATOR_MANAGER_SERVICE)
+                as? VibratorManager
+            return manager?.defaultVibrator?.hasVibrator() == true
+        }
+        @Suppress("DEPRECATION")
+        val vibrator = activity.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+        return vibrator?.hasVibrator() == true
     }
 
     private fun pickLargest(a: Float, b: Float): Float = if (kotlin.math.abs(a) >= kotlin.math.abs(b)) a else b

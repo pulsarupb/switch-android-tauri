@@ -123,6 +123,7 @@ export type SwitchInputEvent = ButtonEvent | AxesEvent | TouchEvent | ImuEvent;
 export interface StateResponse {
   enabled: boolean;
   available: boolean;
+  rumbleAvailable: boolean;
   deviceName: string | null;
   pressed: string[];
 }

@@ -37,6 +37,8 @@ export class SwitchInput {
   enabled = $state(false);
   /** Whether native capture is available on the current platform/device. */
   available = $state(false);
+  /** Whether the platform exposes a vibrator (the Switch Lite does not). */
+  rumbleAvailable = $state(false);
   /** Name of the captured controller, if any. */
   deviceName = $state<string | null>(null);
   /** Last error encountered while talking to the native layer. */
@@ -100,6 +102,7 @@ export class SwitchInput {
       const state = await this.#transport.getState();
       this.enabled = state.enabled;
       this.available = state.available;
+      this.rumbleAvailable = state.rumbleAvailable;
       this.deviceName = state.deviceName;
       this.error = null;
     } catch (error) {
@@ -112,6 +115,7 @@ export class SwitchInput {
     const state = await this.#transport.setEnabled(enabled);
     this.enabled = state.enabled;
     this.available = state.available;
+    this.rumbleAvailable = state.rumbleAvailable;
     this.deviceName = state.deviceName;
   }
 

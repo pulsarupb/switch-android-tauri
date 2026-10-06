@@ -83,7 +83,7 @@ object KeyMap {
     }
 
     fun isGamepadSource(source: Int): Boolean {
-        val mask = InputDevice.SOURCE_GAMEPAD or InputDevice.SOURCE_JOYSTICK
-        return (source and mask) != 0
+        return (source and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD ||
+            (source and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
     }
 }

@@ -34,3 +34,6 @@ keystore.properties
 # Android
 crates/tauri-plugin-switch-input/android/.gradle/
 crates/tauri-plugin-switch-input/android/build/
+# Generated copy of the tauri-android library used by the plugin's standalone build.
+crates/tauri-plugin-switch-input/android/.tauri/
+apps/demo/src-tauri/gen/android/app/src/main/jniLibs/

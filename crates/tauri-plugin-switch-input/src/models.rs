@@ -14,6 +14,8 @@ pub struct StateResponse {
     pub enabled: bool,
     /// Whether native capture is actually available on this platform/device.
     pub available: bool,
+    /// Whether the platform exposes a vibrator (the Switch Lite does not).
+    pub rumble_available: bool,
     /// Name of the controller currently being captured, if any.
     pub device_name: Option<String>,
     /// Logical names of the buttons currently held down.
