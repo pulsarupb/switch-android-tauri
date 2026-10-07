@@ -128,7 +128,7 @@ shows the launcher, re-wake and re-`am start`. Run `svc power stayon true`.
   the plugin.
 - `SwitchInputPlugin` (`@TauriPlugin`) splits capture into independent streams
   (`ButtonStream`, `AxisStream`, `TouchStream`, `ImuStream`) and pushes each stream to JS
-  under its own event name (`button`/`axes`/`touch`/`imu`) via `trigger(...)`
+  under its own event name (`buttons`/`axes`/`touch`/`imu`) via `trigger(...)`
   (channel-based; JS uses `addPluginListener`).
 - `KeyMap` maps raw Linux evdev scan codes (primary) with Android key codes as fallback.
 - IMU uses `SensorManager`; rumble uses `InputDevice.vibrator` (API 31+) falling back to
@@ -144,7 +144,7 @@ Every stream is independently `off`, `push` (event per change) or `poll` (cached
 
 | Stream | Event | Default | Notes |
 | --- | --- | --- | --- |
-| buttons | `button` | push | discrete edges; buffered for `poll({ drain: true })` |
+| buttons | `buttons` | push | discrete edges; buffered for `poll({ drain: true })` |
 | axes | `axes` | push | `rateMs` 16, `deadzone` 0.01, optional `includeRaw` |
 | touch | `touch` | push | always observed, never consumed |
 | imu | `imu` | **off** | `sensorDelay` ui/game/fastest, `rateMs` 50 |

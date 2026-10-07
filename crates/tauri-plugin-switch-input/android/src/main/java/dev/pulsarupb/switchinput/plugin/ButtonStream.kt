@@ -13,7 +13,7 @@ import java.util.Collections
  * can catch every press/release without subscribing to push events.
  */
 class ButtonStream(private val ctx: StreamContext) : InputStream {
-    override val streamName = "button"
+    override val streamName = "buttons"
     override val snapshotKey = "buttons"
 
     private var settings = StreamDefaults.buttons()
